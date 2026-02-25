@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Zombie Strike</title>
+<style>
+body { margin:0; overflow:hidden; font-family:Arial; background:black;}
+#ui {
+position:absolute; top:10px; left:10px; color:white; z-index:10;
+}
+#crosshair {
+position:absolute; top:50%; left:50%;
+width:8px; height:8px;
+margin-left:-4px; margin-top:-4px;
+background:white; border-radius:50%;
+z-index:10;
+}
+#menu {
+position:absolute;
+top:50%; left:50%;
+transform:translate(-50%,-50%);
+background:rgba(0,0,0,0.8);
+color:white;
+padding:20px;
+display:none;
+z-index:20;
+}
+button { padding:8px; margin-top:10px; }
+</style>
+</head>
+<body>
+<div id="ui">
+<div id="stats"></div>
+<div id="fps"></div>
+</div>
+<div id="crosshair"></div>
+<div id="menu">
+<h2>Settings</h2>
+<button onclick="toggleQuality()">Toggle Graphics</button><br>
+<button onclick="resume()">Resume</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/controls/PointerLockControls.js"></script>
+
+<script>
+let scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x000000, 10, 100);
+
+let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+let controls = new THREE.PointerLockControls(camera, document.body);
+document.body.addEventListener('click', ()=>controls.lock());
+scene.add(controls.getObject());
+
+let light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(5,10,5);
+light.castShadow=true;
+scene.add(light);
+
+scene.add(new THREE.AmbientLight(0x404040));
+
+let ground = new THREE.Mesh(
+new THREE.PlaneGeometry(500,500),
+new THREE.MeshStandardMaterial({color:0x111111})
+);
+ground.rotation.x=-Math.PI/2;
+ground.receiveShadow=true;
+scene.add(ground);
+
+let buildings=[];
+for(let i=0;i<30;i++){
+let b=new THREE.Mesh(
+new THREE.BoxGeometry(5,Math.random()*10+5,5),
+new THREE.MeshStandardMaterial({color:0x222222})
+);
+b.position.set((Math.random()-0.5)*200, b.geometry.parameters.height/2, (Math.random()-0.5)*200);
+b.castShadow=true;
+scene.add(b);
+buildings.push(b);
+}
+
+camera.position.y=2;
+
+let zombies=[];
+let wave=1;
+let score=0;
+let health=100;
+let ammo=30;
+let reserve=90;
+let weapon=1;
+let lastShot=0;
+let fpsCounter=0;
+let lastFrame=performance.now();
+let graphicsHigh=true;
+
+function spawnZombie(boss=false){
+let geo = boss? new THREE.BoxGeometry(3,6,3): new THREE.BoxGeometry(2,4,2);
+let mat = new THREE.MeshStandardMaterial({color: boss?0xaa0000:0x00aa00});
+let z=new THREE.Mesh(geo,mat);
+z.position.set((Math.random()-0.5)*100, geo.parameters.height/2, (Math.random()-0.5)*100);
+z.health=boss?200:50;
+z.speed=boss?0.02:0.03+wave*0.002;
+scene.add(z);
+zombies.push(z);
+}
+
+function nextWave(){
+for(let i=0;i<wave*3;i++) spawnZombie();
+if(wave%5==0) spawnZombie(true);
+wave++;
+}
+
+nextWave();
+
+let velocity=new THREE.Vector3();
+let move={};
+
+document.addEventListener("keydown",e=>{
+move[e.code]=true;
+if(e.code==="Digit1") weapon=1;
+if(e.code==="Digit2") weapon=2;
+if(e.code==="KeyR") reload();
+if(e.code==="KeyG") grenade();
+if(e.code==="Escape") openMenu();
+});
+document.addEventListener("keyup",e=>move[e.code]=false);
+
+function reload(){
+if(reserve<=0) return;
+let needed=30-ammo;
+let take=Math.min(needed,reserve);
+ammo+=take;
+reserve-=take;
+}
+
+function grenade(){
+zombies.forEach(z=>{
+if(z.position.distanceTo(camera.position)<10){
+z.health-=50;
+}
+});
+}
+
+function shoot(){
+if(ammo<=0) return;
+if(performance.now()-lastShot<150) return;
+ammo--;
+lastShot=performance.now();
+
+let ray=new THREE.Raycaster(camera.position,
+new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion));
+
+let intersects=ray.intersectObjects(zombies);
+if(intersects.length>0){
+let z=intersects[0].object;
+z.health-=weapon==1?25:50;
+if(z.health<=0){
+scene.remove(z);
+zombies.splice(zombies.indexOf(z),1);
+score+=10;
+}
+}
+}
+
+document.addEventListener("mousedown",shoot);
+
+function toggleQuality(){
+graphicsHigh=!graphicsHigh;
+renderer.setPixelRatio(graphicsHigh?window.devicePixelRatio:0.5);
+}
+
+function openMenu(){
+document.getElementById("menu").style.display="block";
+controls.unlock();
+}
+function resume(){
+document.getElementById("menu").style.display="none";
+controls.lock();
+}
+
+function animate(){
+requestAnimationFrame(animate);
+
+let now=performance.now();
+fpsCounter=Math.round(1000/(now-lastFrame));
+lastFrame=now;
+
+if(controls.isLocked){
+velocity.z = (move["KeyW"]? -0.1:0)+(move["KeyS"]?0.1:0);
+velocity.x = (move["KeyA"]? -0.1:0)+(move["KeyD"]?0.1:0);
+if(move["ShiftLeft"]) velocity.multiplyScalar(1.5);
+controls.moveRight(velocity.x);
+controls.moveForward(velocity.z);
+}
+
+zombies.forEach(z=>{
+z.lookAt(camera.position);
+z.position.add(
+camera.position.clone().sub(z.position).normalize().multiplyScalar(z.speed)
+);
+if(z.position.distanceTo(camera.position)<1.5){
+health-=0.1;
+}
+});
+
+if(zombies.length===0) nextWave();
+
+if(health<=0){
+alert("Game Over! Score: "+score);
+localStorage.setItem("highscore",Math.max(score,localStorage.getItem("highscore")||0));
+location.reload();
+}
+
+document.getElementById("stats").innerHTML=
+"Health: "+Math.floor(health)+"<br>"+
+"Wave: "+wave+"<br>"+
+"Score: "+score+"<br>"+
+"Ammo: "+ammo+"/"+reserve+"<br>"+
+"High Score: "+(localStorage.getItem("highscore")||0);
+
+document.getElementById("fps").innerHTML="FPS: "+fpsCounter;
+
+renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
