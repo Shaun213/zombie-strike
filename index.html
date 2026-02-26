@@ -2,67 +2,43 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZOMBIE STRIKE: ELITE</title>
-    <style>
-        /* Unified Styles from Capybara Survivor & Zombie Strike */
-        :root { --gold: #f1c40f; --army: #4b5320; --danger: #e74c3c; --blue: #2196f3; --dark: rgba(10,10,10,0.95); }
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        
-        /* FPS Monitor */
-        #fps-hud { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; z-index: 2000; background: rgba(0,0,0,0.5); padding: 4px; border-radius: 4px; }
-
-        /* Tactical HUD */
-        .hud-tactical { position: absolute; top: 20px; left: 20px; width: 300px; padding: 20px; background: var(--dark); border-left: 5px solid var(--gold); border-radius: 4px; z-index: 100; box-shadow: 0 10px 30px #000; }
-        .mc-display { color: var(--gold); font-size: 34px; font-weight: 900; text-shadow: 2px 2px 4px #000; }
-        .integrity-bar { width: 100%; height: 10px; background: #222; margin-top: 15px; border-radius: 5px; overflow: hidden; }
-        #integrity-fill { height: 100%; background: linear-gradient(90deg, #4ef037, #2ecc71); width: 100%; transition: width 0.3s; }
-
-        /* Killstreak System */
-        .streak-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 450px; text-align: center; z-index: 100; }
-        .streak-label { color: var(--gold); font-size: 11px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
-        .streak-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-top: 8px; overflow: hidden; }
-        #streak-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), #e67e22); transition: width 0.2s; }
-
-        /* Start Menu */
-        #start-screen { position: absolute; inset: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; }
-        .play-btn { padding: 20px 100px; font-size: 36px; background: var(--gold); border: none; border-radius: 12px; cursor: pointer; font-weight: 900; color: #1a1a1a; transition: 0.2s; }
-        .play-btn:hover { transform: scale(1.1); box-shadow: 0 0 30px var(--gold); }
-
-        /* Support Shop */
-        #shop-modal { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: none; align-items: center; justify-content: center; z-index: 2500; }
-        .terminal { background: #151515; border: 2px solid var(--blue); padding: 40px; border-radius: 15px; width: 600px; color: white; }
+    <link rel="stylesheet" href="style.css"> <style>
+        :root { --gold: #f1c40f; --army: #4b5320; --blue: #2196f3; --dark: #0a0a0a; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; color: white; }
+        #menu { position: absolute; inset: 0; background: linear-gradient(135deg, #1a1a2e, #16213e); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; }
+        .panel { background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; margin: 10px; border: 1px solid var(--gold); }
+        .btn-init { background: var(--gold); color: black; padding: 15px 50px; font-size: 24px; font-weight: bold; border: none; cursor: pointer; border-radius: 5px; }
+        #hud { position: absolute; top: 20px; left: 20px; display: none; z-index: 100; }
+        .stat-box { background: rgba(0,0,0,0.7); padding: 15px; border-left: 5px solid var(--gold); }
+        #perf { position: absolute; top: 10px; right: 10px; color: #0f0; font-family: monospace; }
     </style>
 </head>
 <body>
-    <div id="fps-hud">FPS: <span id="fps-val">60</span></div>
+    <div id="perf">FPS: <span id="fps-val">60</span></div>
 
-    <div id="start-screen">
-        <h1 style="color:white; font-size:72px; margin-bottom:40px; font-family:'Arial Black';">ZOMBIE STRIKE: ELITE</h1>
-        <button class="play-btn" onclick="GameCore.start()">▶ INITIALIZE</button>
+    <div id="menu">
+        <h1 style="font-size: 48px; color: var(--gold);">ZOMBIE STRIKE: ELITE</h1>
+        <div class="panel">
+            <h3>SELECT SKIN</h3>
+            <button onclick="setSkin(0x4b5320)">ARMY GREEN</button>
+            <button onclick="setSkin(0x3498db)">STRIKE BLUE</button>
+        </div>
+        <button class="btn-init" onclick="initializeGame()">▶ INITIALIZE</button>
     </div>
 
-    <div class="hud-tactical">
-        <div class="mc-display">💰 $<span id="mc-count">2500</span></div>
-        <div style="color:rgba(255,255,255,0.6); font-size:10px; letter-spacing:2px; margin-top:5px;">SYSTEM INTEGRITY</div>
-        <div class="integrity-bar"><div id="integrity-fill"></div></div>
-        <div style="color:white; margin-top:15px; font-weight:900;">WAVE: <span id="wave-num">1</span></div>
-    </div>
-
-    <div class="streak-container">
-        <div class="streak-label">Airstrike Protocol: <span id="streak-text">0</span>/15 Kills</div>
-        <div class="streak-bar"><div id="streak-fill"></div></div>
-    </div>
-
-    <div id="shop-modal">
-        <div class="terminal">
-            <h2 style="color:var(--blue); border-bottom:1px solid #333; padding-bottom:10px;">TACTICAL SUPPORT TERMINAL</h2>
-            <p>Select reinforcements to deploy via MC credits.</p>
-            <button onclick="GameCore.buySoldier('RIFLEMAN', 1000)" style="width:100%; padding:15px; background:var(--blue); color:white; border:none; margin-top:20px; cursor:pointer;">RECRUIT RIFLEMAN ($1000)</button>
-            <button onclick="UI.toggleShop()" style="margin-top:20px; color:gray; background:none; border:none; cursor:pointer;">EXIT TERMINAL</button>
+    <div id="hud">
+        <div class="stat-box">
+            <div style="color: var(--gold); font-size: 28px;">💰 $<span id="mc-val">0</span></div>
+            <div id="wave-val">WAVE 1</div>
+            <div style="width: 200px; height: 10px; background: #333; margin-top: 10px;">
+                <div id="hp-fill" style="width: 100%; height: 100%; background: #2ecc71;"></div>
+            </div>
         </div>
     </div>
 
-    <canvas id="world-canvas"></canvas>
+    <canvas id="c"></canvas>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="system.js"></script>
