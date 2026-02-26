@@ -2,8 +2,29 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Zombie Strike Phase 2</title>
-<link rel="stylesheet" href="style.css">
+<title>Zombie Strike</title>
+<style>
+body { margin:0; overflow:hidden; background:#000; font-family:Arial; color:white;}
+#hud { position:absolute; top:15px; left:15px; z-index:10;}
+#fps { font-size:12px; color:#aaa; }
+#crosshair {
+position:absolute; top:50%; left:50%;
+width:12px; height:12px;
+margin-left:-6px; margin-top:-6px;
+border:2px solid white;
+border-radius:50%;
+z-index:10;
+}
+#damage {
+position:absolute;
+top:0; left:0;
+width:100%; height:100%;
+background:red;
+opacity:0;
+pointer-events:none;
+transition:opacity 0.15s;
+}
+</style>
 </head>
 <body>
 
@@ -13,18 +34,211 @@
 </div>
 
 <div id="crosshair"></div>
-
-<div id="menu">
-<h2>Settings</h2>
-<label>Sensitivity</label>
-<input type="range" id="sens" min="0.1" max="1" step="0.1">
-<button onclick="toggleShadows()">Toggle Shadows</button>
-<button onclick="toggleQuality()">Toggle Graphics</button>
-<button onclick="resume()">Resume</button>
-</div>
+<div id="damage"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/controls/PointerLockControls.js"></script>
-<script src="game.js"></script>
+
+<script>
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0f1a);
+scene.fog = new THREE.Fog(0x000000, 30, 180);
+
+let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(0,2,0);
+
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+let controls = new THREE.PointerLockControls(camera, document.body);
+document.body.addEventListener("click", ()=>controls.lock());
+scene.add(controls.getObject());
+
+/* LIGHTING */
+scene.add(new THREE.HemisphereLight(0x99aaff,0x080820,0.6));
+let dir = new THREE.DirectionalLight(0xffffff,1);
+dir.position.set(20,40,20);
+dir.castShadow=true;
+scene.add(dir);
+
+/* GROUND */
+let ground = new THREE.Mesh(
+new THREE.PlaneGeometry(600,600),
+new THREE.MeshStandardMaterial({color:0x1c1c1c})
+);
+ground.rotation.x=-Math.PI/2;
+ground.receiveShadow=true;
+scene.add(ground);
+
+/* BUILDINGS */
+let buildings=[];
+for(let i=0;i<60;i++){
+let h=Math.random()*20+10;
+let b=new THREE.Mesh(
+new THREE.BoxGeometry(10,h,10),
+new THREE.MeshStandardMaterial({color:0x222222})
+);
+b.position.set((Math.random()-0.5)*300,h/2,(Math.random()-0.5)*300);
+b.castShadow=true;
+scene.add(b);
+buildings.push(b);
+}
+
+/* WEAPON */
+let gun = new THREE.Mesh(
+new THREE.BoxGeometry(0.3,0.2,1),
+new THREE.MeshStandardMaterial({color:0x555555})
+);
+gun.position.set(0.6,-0.5,-1);
+camera.add(gun);
+
+/* GAME STATE */
+let zombies=[];
+let wave=1;
+let score=0;
+let health=100;
+let ammo=12;
+let reserve=48;
+let lastShot=0;
+
+/* SPAWN */
+function spawnZombie(boss=false){
+let size=boss?4:2;
+let z=new THREE.Mesh(
+new THREE.BoxGeometry(size,size*2,size),
+new THREE.MeshStandardMaterial({color:boss?0xaa0000:0x006600})
+);
+z.position.set((Math.random()-0.5)*200,size,(Math.random()-0.5)*200);
+z.health=boss?300:80+wave*10;
+z.speed=boss?0.015:0.02+wave*0.001;
+z.attackCooldown=0;
+z.isBoss=boss;
+scene.add(z);
+zombies.push(z);
+}
+
+function nextWave(){
+for(let i=0;i<wave*4;i++) spawnZombie();
+if(wave%5===0) spawnZombie(true);
+wave++;
+}
+nextWave();
+
+/* SHOOT */
+function shoot(){
+if(ammo<=0) return;
+if(performance.now()-lastShot<150) return;
+ammo--;
+lastShot=performance.now();
+
+/* recoil */
+gun.rotation.x = -0.2;
+setTimeout(()=>gun.rotation.x=0,80);
+
+/* muzzle flash */
+let flash = new THREE.PointLight(0xffaa00,2,6);
+flash.position.copy(camera.position);
+scene.add(flash);
+setTimeout(()=>scene.remove(flash),50);
+
+let ray=new THREE.Raycaster(camera.position,
+new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion));
+
+let hits=ray.intersectObjects(zombies);
+if(hits.length>0){
+let z=hits[0].object;
+z.health-=50;
+bloodEffect(z.position.clone());
+if(z.health<=0){
+scene.remove(z);
+zombies.splice(zombies.indexOf(z),1);
+score+=10;
+}
+}
+}
+document.addEventListener("mousedown",shoot);
+
+/* BLOOD */
+function bloodEffect(pos){
+let geo=new THREE.BufferGeometry();
+let points=[];
+for(let i=0;i<25;i++){
+points.push(pos.clone().add(
+new THREE.Vector3(
+(Math.random()-0.5)*2,
+Math.random()*2,
+(Math.random()-0.5)*2
+)));
+}
+geo.setFromPoints(points);
+let mat=new THREE.PointsMaterial({color:0xaa0000,size:0.3});
+let p=new THREE.Points(geo,mat);
+scene.add(p);
+setTimeout(()=>scene.remove(p),300);
+}
+
+/* MOVEMENT */
+let move={};
+document.addEventListener("keydown",e=>move[e.code]=true);
+document.addEventListener("keyup",e=>move[e.code]=false);
+
+/* LOOP */
+let fps=0;
+let lastFrame=performance.now();
+
+function animate(){
+requestAnimationFrame(animate);
+
+let now=performance.now();
+fps=Math.round(1000/(now-lastFrame));
+lastFrame=now;
+
+if(controls.isLocked){
+let speed=move["ShiftLeft"]?0.25:0.15;
+if(move["KeyW"]) controls.moveForward(speed);
+if(move["KeyS"]) controls.moveForward(-speed);
+if(move["KeyA"]) controls.moveRight(-speed);
+if(move["KeyD"]) controls.moveRight(speed);
+}
+
+/* AI */
+zombies.forEach(z=>{
+let dir=camera.position.clone().sub(z.position).normalize();
+z.position.add(dir.multiplyScalar(z.speed));
+
+if(z.position.distanceTo(camera.position)<2){
+if(z.attackCooldown<=0){
+health-=10;
+document.getElementById("damage").style.opacity=0.4;
+setTimeout(()=>document.getElementById("damage").style.opacity=0,150);
+z.attackCooldown=60;
+}
+}
+z.attackCooldown--;
+});
+
+if(health<100) health+=0.05;
+
+if(zombies.length===0) nextWave();
+
+if(health<=0){
+alert("Game Over | Score: "+score);
+location.reload();
+}
+
+document.getElementById("stats").innerHTML=
+`Health: ${Math.floor(health)}<br>
+Wave: ${wave}<br>
+Score: ${score}<br>
+Ammo: ${ammo}/${reserve}`;
+
+document.getElementById("fps").innerHTML="FPS: "+fps;
+
+renderer.render(scene,camera);
+}
+animate();
+</script>
 </body>
 </html>
