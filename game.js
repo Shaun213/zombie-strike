@@ -114,3 +114,13 @@ function drawEverything(){
     tm.bullets.forEach(b=>ctx.fillRect(b.x,b.y,5,10));
   });
 }
+function gameLoop(){
+  requestAnimationFrame(gameLoop);
+  updatePlayer();
+  updateBullets();
+  updateZombiesAndTeammates();
+  updateWaves();
+  drawEverything();
+  drawHUD();
+  updateFPS();
+}
