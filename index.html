@@ -63,7 +63,21 @@ document.getElementById("startBtn").onclick = ()=>{
     canvas.style.display="block";
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+
     setGameMode(document.getElementById("gameMode").value);
+
+    // Reset player
+    player.position = {x:0, y:1, z:0};
+    player.health = player.maxHealth;
+    player.money = 0;
+    player.score = 0;
+
+    // Spawn power-ups and first wave
+    spawnPowerUp("health");
+    spawnPowerUp("ammo");
+    spawnPowerUp("speed");
+    spawnNextWave();
+
     startGame();
 }
 </script>
