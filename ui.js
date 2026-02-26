@@ -1,13 +1,20 @@
 const UI = {
     render(game) {
-        document.getElementById('mc-val').innerText = Math.floor(game.mc);
-        document.getElementById('weapon-display').innerText = game.player.weapon.name.toUpperCase();
-        document.getElementById('wave-display').innerText = `WAVE ${game.wave - 1}`;
+        document.getElementById('cash-txt').innerText = `💰 $${Math.floor(game.mc)}`;
+        document.getElementById('weapon-txt').innerText = game.player.weapon.name.toUpperCase();
         document.getElementById('hp-fill').style.width = `${game.player.hp}%`;
-        document.getElementById('xp-fill').style.width = `${(game.xp / game.xpToNext) * 100}%`;
+        
+        // XP Progress Scaling
+        const xpPercent = (game.xp / game.xpToNext) * 100;
+        document.getElementById('xp-fill').style.width = `${xpPercent}%`;
+        
+        // Dynamic Notification
+        const air = document.getElementById('air-ready');
+        air.style.display = game.mc >= 5000 ? 'block' : 'none';
     },
+
     toggleShop() {
-        const s = document.getElementById('shop-menu');
+        const s = document.getElementById('shop-tablet');
         s.style.display = s.style.display === 'block' ? 'none' : 'block';
     }
 };
