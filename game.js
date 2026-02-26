@@ -1,126 +1,130 @@
 // game.js
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+let scene, camera, renderer, player, bullets=[], clock=new THREE.Clock();
+let shootCooldown=0;
 
-let player = {x:450,y:500,size:30,health:100,color:"#00ff00"};
-let bullets = [];
-let money = 0;
-let score = 0;
+function init3D(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+  camera = new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+  camera.position.set(0,20,30);
+  camera.lookAt(0,0,0);
+  renderer = new THREE.WebGLRenderer({canvas: document.getElementById("gameCanvas")});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const light = new THREE.DirectionalLight(0xffffff,0.8);
+  light.position.set(10,20,10);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0xffffff,0.6));
+
+  const geometry = new THREE.BoxGeometry(2,2,2);
+  const material = new THREE.MeshStandardMaterial({color:0x00ff00});
+  player = new THREE.Mesh(geometry,material);
+  player.position.set(0,1,0);
+  player.health=100;
+  scene.add(player);
+
+  const groundGeom = new THREE.PlaneGeometry(200,200);
+  const groundMat = new THREE.MeshStandardMaterial({color:0x228B22});
+  const ground = new THREE.Mesh(groundGeom, groundMat);
+  ground.rotation.x = -Math.PI/2;
+  scene.add(ground);
+
+  animate3D();
+}
 
 let keys = {};
-
 document.addEventListener("keydown", e=>{ keys[e.key]=true; });
 document.addEventListener("keyup", e=>{ keys[e.key]=false; });
 
-function updatePlayer(){
-  if(keys['ArrowLeft'] && player.x>0) player.x-=5;
-  if(keys['ArrowRight'] && player.x<canvas.width-player.size) player.x+=5;
-  if(keys['ArrowUp'] && player.y>0) player.y-=5;
-  if(keys['ArrowDown'] && player.y<canvas.height-player.size) player.y+=5;
+function updatePlayer3D(delta){
+  const speed = 10*delta;
+  if(keys['w']) player.position.z -= speed;
+  if(keys['s']) player.position.z += speed;
+  if(keys['a']) player.position.x -= speed;
+  if(keys['d']) player.position.x += speed;
 
-  // Shoot bullets
+  camera.position.x = player.position.x;
+  camera.position.z = player.position.z + 30;
+  camera.lookAt(player.position);
+
   if(keys[' '] && shootCooldown<=0){
-    bullets.push({x:player.x+player.size/2-5,y:player.y,dx:0,dy:-10});
-    shootCooldown=15;
+    shootBullet3D();
+    shootCooldown=0.2;
   }
-  if(shootCooldown>0) shootCooldown--;
+  if(shootCooldown>0) shootCooldown-=delta;
 }
 
-let shootCooldown=0;
-
-function updateBullets(){
-  bullets.forEach((b,index)=>{
-    b.y+=b.dy;
-    if(b.y<0) bullets.splice(index,1);
-  });
+function shootBullet3D(){
+  const geom = new THREE.SphereGeometry(0.3,8,8);
+  const mat = new THREE.MeshStandardMaterial({color:0xffff00});
+  const b = new THREE.Mesh(geom, mat);
+  b.position.copy(player.position);
+  b.direction = new THREE.Vector3(0,0,-1);
+  scene.add(b);
+  bullets.push(b);
 }
 
-// Update zombies and check collisions
-function updateZombiesAndTeammates(){
-  zombies.forEach((z,index)=>{
-    z.y+=z.speed;
-
-    // Collision with player
-    if(rectIntersect(player,z)){
-      player.health-=10;
-      zombies.splice(index,1);
-    }
-
-    // Collision with bullets
-    bullets.forEach((b,bIndex)=>{
-      if(rectIntersect(b,z)){
+function updateBullets3D(delta){
+  bullets.forEach((b,i)=>{
+    b.position.add(b.direction.clone().multiplyScalar(20*delta));
+    zombies.forEach((z,zi)=>{
+      if(b.position.distanceTo(z.position)<1.5){
         z.health-=15;
-        bullets.splice(bIndex,1);
+        scene.remove(b);
+        bullets.splice(i,1);
         if(z.health<=0){
           money+=z.boss?50:10;
           score+=z.boss?100:10;
-          zombies.splice(index,1);
+          scene.remove(z);
+          zombies.splice(zi,1);
           if(z.boss) bossSpawned=false;
         }
       }
     });
   });
+}
 
+function updateZombies3D(delta){
+  zombies.forEach((z,i)=>{
+    const dir = new THREE.Vector3().subVectors(player.position,z.position).normalize();
+    z.position.add(dir.multiplyScalar(z.speed*delta));
+    if(player.position.distanceTo(z.position)<2){
+      player.health-=10;
+      scene.remove(z);
+      zombies.splice(i,1);
+    }
+  });
+}
+
+function updateTeammates3D(delta){
   spawnTeammates(player);
-
-  // Teammate bullets
   teammates.forEach(tm=>{
     tm.bullets.forEach((b,i)=>{
-      b.x+=b.dx*10;
-      b.y+=b.dy*10;
+      b.position.add(b.direction.clone().multiplyScalar(20*delta));
       zombies.forEach((z,zi)=>{
-        if(rectIntersect(b,z)){
+        if(b.position.distanceTo(z.position)<1.5){
           z.health-=10;
+          scene.remove(b);
+          tm.bullets.splice(i,1);
           if(z.health<=0){
             money+=z.boss?50:10;
             score+=z.boss?100:10;
+            scene.remove(z);
             zombies.splice(zi,1);
-            if(z.boss) bossSpawned=false;
           }
-          tm.bullets.splice(i,1);
         }
       });
     });
   });
 }
 
-function rectIntersect(a,b){
-  return a.x < b.x+b.size && a.x+a.size>b.x && a.y < b.y+b.size && a.y+a.size>b.y;
-}
-
-function drawEverything(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // Player
-  ctx.fillStyle = player.color;
-  ctx.fillRect(player.x,player.y,player.size,player.size);
-
-  // Bullets
-  ctx.fillStyle = "#ff0";
-  bullets.forEach(b=>ctx.fillRect(b.x,b.y,10,20));
-
-  // Zombies
-  zombies.forEach(z=>{
-    ctx.fillStyle = z.boss?"#f00":"#a00";
-    ctx.fillRect(z.x,z.y,z.size,z.size);
-  });
-
-  // Teammates
-  teammates.forEach(tm=>{
-    ctx.fillStyle = "#0ff";
-    ctx.fillRect(tm.x,tm.y,tm.size,tm.size);
-    // Teammate bullets
-    ctx.fillStyle = "#ff0";
-    tm.bullets.forEach(b=>ctx.fillRect(b.x,b.y,5,10));
-  });
-}
-function gameLoop(){
-  requestAnimationFrame(gameLoop);
-  updatePlayer();
-  updateBullets();
-  updateZombiesAndTeammates();
+function animate3D(){
+  requestAnimationFrame(animate3D);
+  const delta = clock.getDelta();
+  updatePlayer3D(delta);
+  updateBullets3D(delta);
+  updateZombies3D(delta);
+  updateTeammates3D(delta);
   updateWaves();
-  drawEverything();
-  drawHUD();
-  updateFPS();
+  renderer.render(scene,camera);
 }
