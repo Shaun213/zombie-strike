@@ -4,165 +4,194 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 const Game = {
-    // Economy & Stats
-    mc: 2500, wave: 0, mult: 1, streak: 0, fps: 0,
-    xp: 0, xpNext: 100, lastTime: 0,
-    
-    // Entity Lists
-    zombies: [], bullets: [], squad: [], particles: [],
-    
-    // Player State
+    // Game State
+    mc: 2500, wave: 1, streak: 0, mult: 1, 
+    enemies: [], bullets: [], squad: [], particles: [],
+    lastUpdate: 0, paused: false,
+
+    // Raycasting Player
     player: {
-        x: 100, y: 100, hp: 100, maxHp: 100,
-        weapon: { name: "Tactical Pistol", dmg: 25, rate: 250, next: 0, level: 1 },
-        perks: { regen: false, doubleTap: false }
+        x: 12, y: 12, dirX: -1, dirY: 0, planeX: 0, planeY: 0.66,
+        hp: 100, maxHp: 100, regen: false,
+        weapon: { dmg: 35, rate: 180, next: 0, level: 1 }
     },
+
+    // 1 = Wall, 0 = Floor
+    map: [
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,0,1],
+        [1,0,1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,0,1],
+        [1,0,1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ],
 
     init() {
         System.init();
-        this.nextWave();
+        this.spawnWave();
         requestAnimationFrame(t => this.loop(t));
     },
 
-    // AI Recruit System
-    buyTeammate(type) {
-        const costs = { RIFLE: 1000, HEAVY: 2500 };
-        if (this.mc >= costs[type] && this.squad.length < 3) {
-            this.mc -= costs[type];
-            this.squad.push({
-                type, x: this.player.x, y: this.player.y,
-                hp: 100, shootNext: 0, dmg: type === 'RIFLE' ? 15 : 40
-            });
-            UI.toggleShop();
+    // Purchase Logic
+    purchase(item) {
+        const costs = { RIFLEMAN: 1000, HEAVY: 2000, MEDIC: 1500, DMG_UP: 1500, RATE_UP: 2000, PERK_REGEN: 3000 };
+        if (this.mc >= costs[item]) {
+            this.mc -= costs[item];
+            if (item === 'RIFLEMAN') this.squad.push({ type: 'RIFLE', x: this.player.x, y: this.player.y, dmg: 20, rate: 500, next: 0 });
+            if (item === 'PERK_REGEN') this.player.regen = true;
+            if (item === 'DMG_UP') this.player.weapon.dmg += 15;
+            UI.updateDisplay(this);
         }
     },
 
-    // Weapon Upgrade System
-    buyUpgrade(stat) {
-        const cost = 1500 * this.player.weapon.level;
-        if (this.mc >= cost) {
-            this.mc -= cost;
-            if (stat === 'damage') this.player.weapon.dmg += 15;
-            if (stat === 'fireRate') this.player.weapon.rate *= 0.8;
-            this.player.weapon.level++;
-            UI.toggleShop();
-        }
-    },
-
-    nextWave() {
-        this.wave++;
-        this.mc += 500;
+    spawnWave() {
         const isBoss = this.wave % 5 === 0;
         const count = isBoss ? 1 : 10 + (this.wave * 2);
-        
-        for(let i=0; i < count; i++) {
-            this.zombies.push({
-                x: Math.random() > 0.5 ? -100 : canvas.width + 100,
-                y: Math.random() * canvas.height,
-                hp: isBoss ? 2000 : 50 + (this.wave * 10),
-                speed: isBoss ? 1.5 : 2 + Math.random() * 2,
-                isBoss, size: isBoss ? 90 : 40
+        for(let i=0; i<count; i++) {
+            this.enemies.push({
+                x: 2 + Math.random() * 20, y: 2 + Math.random() * 4,
+                hp: isBoss ? 2500 : 60 + (this.wave * 10),
+                isBoss, speed: isBoss ? 0.015 : 0.03 + Math.random() * 0.02,
+                size: isBoss ? 1.5 : 0.4
             });
         }
     },
 
     update(dt) {
-        // Player Movement (WASD)
+        if (this.paused) return;
         const p = this.player;
-        const speed = 400 * dt;
-        if (System.keys['KeyW']) p.y -= speed;
-        if (System.keys['KeyS']) p.y += speed;
-        if (System.keys['KeyA']) p.x -= speed;
-        if (System.keys['KeyD']) p.x += speed;
+        const moveS = 4.5 * dt;
+        const rotS = 3.0 * dt;
 
-        // Multiplier & Perk Logic
-        if (p.perks.regen && p.hp < 100) p.hp += 0.02;
-        this.mult = Math.min(5, 1 + Math.floor(this.streak / 5));
+        // Multiplier Engine
+        this.mult = 1 + Math.floor(this.streak / 5);
+        if (this.mult > 5) this.mult = 5;
 
-        // Shooting Logic
+        // Player Movement & Ray-Collision
+        if (System.keys['KeyW']) {
+            if (this.map[Math.floor(p.x + p.dirX * moveS)][Math.floor(p.y)] === 0) p.x += p.dirX * moveS;
+            if (this.map[Math.floor(p.x)][Math.floor(p.y + p.dirY * moveS)] === 0) p.y += p.dirY * moveS;
+        }
+        if (System.keys['KeyS']) {
+            if (this.map[Math.floor(p.x - p.dirX * moveS)][Math.floor(p.y)] === 0) p.x -= p.dirX * moveS;
+            if (this.map[Math.floor(p.x)][Math.floor(p.y - p.dirY * moveS)] === 0) p.y -= p.dirY * moveS;
+        }
+
+        // Rotation Matrix
+        if (System.keys['KeyA']) {
+            let oldDirX = p.dirX;
+            p.dirX = p.dirX * Math.cos(rotS) - p.dirY * Math.sin(rotS);
+            p.dirY = oldDirX * Math.sin(rotS) + p.dirY * Math.cos(rotS);
+            let oldPlaneX = p.planeX;
+            p.planeX = p.planeX * Math.cos(rotS) - p.planeY * Math.sin(rotS);
+            p.planeY = oldPlaneX * Math.sin(rotS) + p.planeY * Math.cos(rotS);
+        }
+        if (System.keys['KeyD']) {
+            let oldDirX = p.dirX;
+            p.dirX = p.dirX * Math.cos(-rotS) - p.dirY * Math.sin(-rotS);
+            p.dirY = oldDirX * Math.sin(-rotS) + p.dirY * Math.cos(-rotS);
+            let oldPlaneX = p.planeX;
+            p.planeX = p.planeX * Math.cos(-rotS) - p.planeY * Math.sin(-rotS);
+            p.planeY = oldPlaneX * Math.sin(-rotS) + p.planeY * Math.cos(-rotS);
+        }
+
+        // Shooting System
         if (System.mouse.down && performance.now() > p.weapon.next) {
             this.fire();
         }
 
-        // Squad AI Movement & Auto-Aim
-        this.squad.forEach(bot => {
-            const d = Math.hypot(p.x - bot.x, p.y - bot.y);
-            if (d > 80) {
-                bot.x += (p.x - bot.x) * 0.05;
-                bot.y += (p.y - bot.y) * 0.05;
-            }
-            // Auto-fire at nearest zombie
-            if (this.zombies.length > 0 && performance.now() > bot.shootNext) {
-                this.bullets.push({ x: bot.x, y: bot.y, vx: 10, vy: 0, dmg: bot.dmg, friendly: true });
-                bot.shootNext = performance.now() + 500;
-            }
-        });
-
-        // Bullet Physics & Collision
-        for(let i=this.bullets.length-1; i>=0; i--) {
-            let b = this.bullets[i];
-            b.x += b.vx; b.y += b.vy;
-            // Check collisions here... (omitted for brevity)
+        // Airstrike Killstreak (G)
+        if (System.keys['KeyG'] && this.streak >= 15) {
+            this.triggerAirstrike();
         }
 
-        // Zombie AI
-        this.zombies.forEach((z, i) => {
-            const ang = Math.atan2(p.y - z.y, p.x - z.x);
-            z.x += Math.cos(ang) * z.speed;
-            z.y += Math.sin(ang) * z.speed;
-            if (Math.hypot(p.x - z.x, p.y - z.y) < 30) {
+        // Perk: Auto-Regen
+        if (p.regen && p.hp < p.maxHp) p.hp += 0.05;
+
+        // Enemy AI & Damage
+        this.enemies.forEach(z => {
+            const angle = Math.atan2(p.y - z.y, p.x - z.x);
+            z.x += Math.cos(angle) * z.speed;
+            z.y += Math.sin(angle) * z.speed;
+            if (Math.hypot(p.x - z.x, p.y - z.y) < 0.6) {
                 p.hp -= 0.5;
-                this.streak = 0; // Reset multiplier on hit
+                this.streak = 0; // Reset streak on damage
             }
         });
 
-        if (this.zombies.length === 0) this.nextWave();
-        System.update(dt, p, canvas);
+        if (this.enemies.length === 0) { this.wave++; this.spawnWave(); }
+        System.update(dt);
     },
 
     fire() {
-        const w = this.player.weapon;
-        w.next = performance.now() + w.rate;
-        const ang = Math.atan2(System.mouse.worldY - this.player.y, System.mouse.worldX - this.player.x);
-        this.bullets.push({
-            x: this.player.x, y: this.player.y,
-            vx: Math.cos(ang) * 15, vy: Math.sin(ang) * 15,
-            dmg: w.dmg, friendly: true
+        const p = this.player;
+        p.weapon.next = performance.now() + p.weapon.rate;
+        System.shake = 12;
+        // Hitscan logic
+        this.enemies.forEach(z => {
+            const dist = Math.hypot(p.x - z.x, p.y - z.y);
+            if (dist < 4) { // Accuracy check
+                z.hp -= p.weapon.dmg;
+                if (z.hp <= 0) {
+                    this.mc += (z.isBoss ? 1000 : 20) * this.mult;
+                    this.streak++;
+                }
+            }
         });
-        System.camera.shake = 10;
-        this.streak++;
+        this.enemies = this.enemies.filter(z => z.hp > 0);
+    },
+
+    triggerAirstrike() {
+        this.enemies = [];
+        this.streak = 0;
+        System.shake = 60;
+        this.mc += 500;
+        console.log("AIRSTRIKE INBOUND!");
     },
 
     draw() {
-        ctx.fillStyle = "#0a0a0a";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Floor & Ceiling
+        ctx.fillStyle = "#0c0c0c"; ctx.fillRect(0, 0, canvas.width, canvas.height/2);
+        ctx.fillStyle = "#1a1a1a"; ctx.fillRect(0, canvas.height/2, canvas.width, canvas.height/2);
 
-        ctx.save();
-        ctx.translate(canvas.width/2 - System.camera.x, canvas.height/2 - System.camera.y);
-        
-        // Render 3D Grid
-        ctx.strokeStyle = "#1a1a1a";
-        for(let x=-2000; x<2000; x+=100) {
-            ctx.beginPath(); ctx.moveTo(x, -2000); ctx.lineTo(x, 2000); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(-2000, x); ctx.lineTo(2000, x); ctx.stroke();
+        // Raycasting Loop
+        for(let x=0; x<canvas.width; x+=4) {
+            let cameraX = 2 * x / canvas.width - 1;
+            let rayX = this.player.dirX + this.player.planeX * cameraX;
+            let rayY = this.player.dirY + this.player.planeY * cameraX;
+
+            let mapX = Math.floor(this.player.x);
+            let mapY = Math.floor(this.player.y);
+            
+            let dX = Math.abs(1 / rayX), dY = Math.abs(1 / rayY);
+            let sideX, sideY, stepX, stepY, hit = 0, side;
+
+            if (rayX < 0) { stepX = -1; sideX = (this.player.x - mapX) * dX; }
+            else { stepX = 1; sideX = (mapX + 1.0 - this.player.x) * dX; }
+            if (rayY < 0) { stepY = -1; sideY = (this.player.y - mapY) * dY; }
+            else { stepY = 1; sideY = (mapY + 1.0 - this.player.y) * dY; }
+
+            while(hit === 0) {
+                if (sideX < sideY) { sideX += dX; mapX += stepX; side = 0; }
+                else { sideY += dY; mapY += stepY; side = 1; }
+                if (this.map[mapX][mapY] > 0) hit = 1;
+            }
+
+            let dist = (side === 0) ? (sideX - dX) : (sideY - dY);
+            let h = Math.floor(canvas.height / dist);
+            
+            ctx.fillStyle = side === 1 ? "#3b4310" : "#4b5320"; // Darker walls for depth
+            ctx.fillRect(x, (canvas.height - h)/2 + System.shakeY, 4, h);
         }
 
-        // Render Entities
-        ctx.fillStyle = "#3498db"; ctx.fillRect(this.player.x-25, this.player.y-25, 50, 50);
-        this.zombies.forEach(z => {
-            ctx.fillStyle = z.isBoss ? "#e74c3c" : "#2ecc71";
-            ctx.fillRect(z.x - z.size/2, z.y - z.size/2, z.size, z.size);
-        });
-
-        ctx.restore();
-        UI.render(this);
+        UI.updateDisplay(this);
     },
 
-    loop(time) {
-        const dt = (time - this.lastTime) / 1000;
-        this.lastTime = time;
-        this.fps = 1 / dt;
-        this.update(dt);
+    loop(t) {
+        const dt = (t - this.lastUpdate) / 1000;
+        this.lastUpdate = t;
+        this.update(dt || 0.016);
         this.draw();
         requestAnimationFrame(t => this.loop(t));
     }
