@@ -1,71 +1,72 @@
-// ui.js
-let lastTime = performance.now();
-let fps = 0;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zombie Strike 3D Indie</title>
+<style>
+body { margin:0; overflow:hidden; font-family:sans-serif; background:#222; color:#fff; }
+#menu { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; }
+#menu h1 { font-size:3em; color:#ff5555; margin-bottom:20px; text-shadow:2px 2px #000; }
+#gameCanvas { display:none; width:100%; height:100%; }
+#hud { position:absolute; top:10px; left:10px; z-index:10; color:#fff; font-size:16px; background: rgba(0,0,0,0.5); padding:10px; border-radius:10px; font-family:Verdana, sans-serif;}
+button { padding:10px 20px; margin:5px; cursor:pointer; font-size:16px; border:none; border-radius:5px; background:#ff5555; color:#fff; transition:0.2s; }
+button:hover { background:#ff7777; }
+label, select, input { margin:5px; font-size:16px; }
+</style>
+</head>
+<body>
 
-// ==========================
-// UPDATE HUD
-function updateHUD(){
-    let now = performance.now();
-    let delta = now - lastTime;
-    fps = Math.round(1000/delta);
-    lastTime = now;
+<div id="menu">
+  <h1>Zombie Strike 3D</h1>
+  <label>Avatar Color: <input type="color" id="avatarColor" value="#ff0000"></label>
+  <label>Difficulty:
+    <select id="difficulty">
+      <option value="easy">Easy</option>
+      <option value="normal" selected>Normal</option>
+      <option value="hard">Hard</option>
+    </select>
+  </label>
+  <label>Game Mode:
+    <select id="gameMode">
+      <option value="arcade">Arcade</option>
+      <option value="survival">Survival</option>
+      <option value="hardcore">Hardcore</option>
+    </select>
+  </label>
+  <button id="startBtn">Start Game</button>
+</div>
 
-    document.getElementById("fpsCounter").innerText = "FPS: " + fps;
-    document.getElementById("moneyDisplay").innerText = "Money: $" + Math.floor(player.money);
-    document.getElementById("scoreDisplay").innerText = "Score: " + player.score;
-    document.getElementById("waveDisplay").innerText = "Wave: " + waveNumber;
-    document.getElementById("healthDisplay").innerText = "Health: " + Math.floor(player.health);
-    
-    let activePowerUps = powerUps.map(p=>p.type).join(", ") || "None";
-    document.getElementById("powerUpDisplay").innerText = "Power-ups: " + activePowerUps;
+<canvas id="gameCanvas"></canvas>
+
+<div id="hud">
+  <div id="fpsCounter">FPS: 0</div>
+  <div id="moneyDisplay">Money: 0</div>
+  <div id="scoreDisplay">Score: 0</div>
+  <div id="waveDisplay">Wave: 1</div>
+  <div id="healthDisplay">Health: 100</div>
+  <div id="powerUpDisplay">Power-ups: None</div>
+  <button id="buyTeammateBtn">Buy Teammate $100</button>
+  <button id="buyWeaponPistolBtn">Buy Pistol $50</button>
+  <button id="buyWeaponRifleBtn">Buy Rifle $200</button>
+  <button id="buyWeaponMeleeBtn">Buy Melee $100</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.156.0/build/three.min.js"></script>
+<script src="system.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+
+<script>
+document.getElementById("startBtn").onclick = ()=>{
+    document.getElementById("menu").style.display="none";
+    const canvas = document.getElementById("gameCanvas");
+    canvas.style.display="block";
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    setGameMode(document.getElementById("gameMode").value);
+    startGame();
 }
+</script>
 
-// ==========================
-// BUY TEAMMATES
-document.getElementById("buyTeammateBtn").onclick = ()=>{
-    if(player.money>=100){
-        spawnTeammate();
-        player.money-=100;
-    }
-}
-
-// ==========================
-// BUY WEAPONS
-document.getElementById("buyWeaponPistolBtn").onclick = ()=>{
-    if(player.money>=50){
-        player.weapons.pistol = true;
-        player.money-=50;
-    }
-}
-
-document.getElementById("buyWeaponRifleBtn").onclick = ()=>{
-    if(player.money>=200){
-        player.weapons.rifle = true;
-        player.money-=200;
-    }
-}
-
-document.getElementById("buyWeaponMeleeBtn").onclick = ()=>{
-    if(player.money>=100){
-        player.weapons.melee = true;
-        player.money-=100;
-    }
-}
-
-// ==========================
-// ANIMATE HUD
-function animateUI(){
-    updateHUD();
-    requestAnimationFrame(animateUI);
-}
-
-// ==========================
-// START UI LOOP
-animateUI();
-
-// ==========================
-// BONUS: colorful background for HUD
-document.getElementById("hud").style.background="linear-gradient(90deg, rgba(255,0,0,0.3), rgba(255,165,0,0.3), rgba(0,255,255,0.3))";
-document.getElementById("hud").style.padding="10px";
-document.getElementById("hud").style.borderRadius="10px";
-document.getElementById("hud").style.fontFamily="Verdana, sans-serif";
+</body>
+</html>
