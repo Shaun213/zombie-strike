@@ -1,31 +1,27 @@
 const System = {
-    camera: { x: 0, y: 0, shake: 0 },
-    mouse: { x: 0, y: 0, worldX: 0, worldY: 0, down: false },
     keys: {},
+    mouse: { x: 0, y: 0, down: false },
+    shake: 0, shakeY: 0,
 
     init() {
-        window.onkeydown = e => { 
-            this.keys[e.code] = true;
-            if(e.code === 'KeyP') UI.toggleShop();
-        };
-        window.onkeyup = e => this.keys[e.code] = false;
-        window.onmousemove = e => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; };
-        window.onmousedown = () => this.mouse.down = true;
-        window.onmouseup = () => this.mouse.down = false;
+        window.addEventListener('keydown', e => this.keys[e.code] = true);
+        window.addEventListener('keyup', e => this.keys[e.code] = false);
+        window.addEventListener('mousedown', () => this.mouse.down = true);
+        window.addEventListener('mouseup', () => this.mouse.down = false);
+        
+        // Special Key: P for Shop
+        window.addEventListener('keydown', e => {
+            if (e.code === 'KeyP') UI.toggleShop();
+        });
     },
 
-    update(dt, player, canvas) {
-        // Camera Lerp
-        this.camera.x += (player.x - canvas.width / 2 - this.camera.x) * 0.1;
-        this.camera.y += (player.y - canvas.height / 2 - this.camera.y) * 0.1;
-        
-        this.mouse.worldX = this.mouse.x + this.camera.x;
-        this.mouse.worldY = this.mouse.y + this.camera.y;
-
-        if (this.camera.shake > 0) {
-            this.camera.x += (Math.random() - 0.5) * this.camera.shake;
-            this.camera.y += (Math.random() - 0.5) * this.camera.shake;
-            this.camera.shake *= 0.9;
+    update(dt) {
+        // Dynamic Screen Shake logic
+        if (this.shake > 0) {
+            this.shakeY = (Math.random() - 0.5) * this.shake;
+            this.shake *= 0.9;
+        } else {
+            this.shakeY = 0;
         }
     }
 };
