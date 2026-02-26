@@ -1,26 +1,86 @@
-let lastTime = performance.now();
-let fps=0;
+// ----------------------------
+// UI.JS - HUD & INTERACTIONS
+// ----------------------------
 
-function updateHUD(){
-    let now=performance.now();
-    let delta=now-lastTime;
-    fps=Math.round(1000/delta);
-    lastTime=now;
-    document.getElementById("fpsCounter").innerText="FPS: "+fps;
-    document.getElementById("moneyDisplay").innerText="Money: $"+Math.floor(player.money);
-    document.getElementById("scoreDisplay").innerText="Score: "+player.score;
-    document.getElementById("waveDisplay").innerText="Wave: "+waveNumber;
-    document.getElementById("healthDisplay").innerText="Health: "+Math.floor(player.health);
-    let activePowerUps=powerUps.map(p=>p.type).join(", ");
-    document.getElementById("powerUpDisplay").innerText="Power-ups: "+(activePowerUps||"None");
+// ----------------------------
+// GET HUD ELEMENTS
+// ----------------------------
+const fpsCounter = document.getElementById("fpsCounter");
+const moneyDisplay = document.getElementById("moneyDisplay");
+const scoreDisplay = document.getElementById("scoreDisplay");
+const waveDisplay = document.getElementById("waveDisplay");
+const healthDisplay = document.getElementById("healthDisplay");
+const powerUpDisplay = document.getElementById("powerUpDisplay");
+
+const buyTeammateBtn = document.getElementById("buyTeammateBtn");
+const buyWeaponPistolBtn = document.getElementById("buyWeaponPistolBtn");
+const buyWeaponRifleBtn = document.getElementById("buyWeaponRifleBtn");
+const buyWeaponMeleeBtn = document.getElementById("buyWeaponMeleeBtn");
+
+// ----------------------------
+// BUY BUTTON EVENTS
+// ----------------------------
+buyTeammateBtn.onclick = ()=>{
+    if(player.money>=100){
+        player.money-=100;
+        spawnTeammate();
+    }
+};
+
+buyWeaponPistolBtn.onclick = ()=>{
+    if(player.money>=50){
+        player.money-=50;
+        player.weapons.pistol=true;
+    }
+};
+
+buyWeaponRifleBtn.onclick = ()=>{
+    if(player.money>=200){
+        player.money-=200;
+        player.weapons.rifle=true;
+    }
+};
+
+buyWeaponMeleeBtn.onclick = ()=>{
+    if(player.money>=100){
+        player.money-=100;
+        player.weapons.melee=true;
+    }
+};
+
+// ----------------------------
+// FPS COUNTER
+// ----------------------------
+let fpsHistory = [];
+function updateFPS(){
+    const fps = 1/deltaTime;
+    fpsHistory.push(fps);
+    if(fpsHistory.length>20) fpsHistory.shift();
+    const avg = Math.round(fpsHistory.reduce((a,b)=>a+b)/fpsHistory.length);
+    fpsCounter.innerText = "FPS: " + avg;
 }
 
-// BUY BUTTONS
-document.getElementById("buyTeammateBtn").onclick=()=>{if(player.money>=100){spawnTeammate();player.money-=100;}}
-document.getElementById("buyWeaponPistolBtn").onclick=()=>{if(player.money>=50){player.weapons.pistol=true;player.money-=50;}}
-document.getElementById("buyWeaponRifleBtn").onclick=()=>{if(player.money>=200){player.weapons.rifle=true;player.money-=200;}}
-document.getElementById("buyWeaponMeleeBtn").onclick=()=>{if(player.money>=100){player.weapons.melee=true;player.money-=100;}}
+// ----------------------------
+// UPDATE HUD
+// ----------------------------
+function updateHUD(){
+    moneyDisplay.innerText = "Money: " + Math.floor(player.money);
+    scoreDisplay.innerText = "Score: " + player.score;
+    waveDisplay.innerText = "Wave: " + waveNumber;
+    healthDisplay.innerText = "Health: " + Math.floor(player.health) + "/" + player.maxHealth;
 
-// UI ANIMATION
-function animateUI(){updateHUD();requestAnimationFrame(animateUI);}
-animateUI();
+    if(powerUps.length>0){
+        powerUpDisplay.innerText = "Power-ups: " + powerUps.map(p=>p.type).join(", ");
+    } else powerUpDisplay.innerText = "Power-ups: None";
+}
+
+// ----------------------------
+// AUTOMATIC HUD UPDATE
+// ----------------------------
+function animateHUD(){
+    updateFPS();
+    updateHUD();
+    requestAnimationFrame(animateHUD);
+}
+
+animateHUD();
